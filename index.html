@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction History</title>
+
+    <!-- Bootstrap CSS (For Styling) -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    
+    <!-- SheetJS Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.1/xlsx.full.min.js"></script>
+    
+    <style>
+        .container {
+            margin-top: 50px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Transaction History</h2>
+
+    <!-- Add Transaction Form -->
+    <form id="transactionForm">
+        <div class="form-group">
+            <label for="date">Date (Optional)</label>
+            <input type="date" class="form-control" id="date">
+        </div>
+        <div class="form-group">
+            <label for="expense">Expense</label>
+            <input type="text" class="form-control" id="expense">
+        </div>
+        <div class="form-group">
+            <label for="itemCount">Item Count</label>
+            <input type="text" class="form-control" id="itemCount">
+        </div>
+        <div class="form-group">
+            <label for="amount">Amount</label>
+            <input type="number" class="form-control" id="amount" step="0.01">
+        </div>
+        <button type="submit" class="btn btn-primary">Add Transaction</button>
+    </form>
+
+    <hr>
+
+    <!-- Export Button -->
+    <button id="exportTransactionHistory" class="btn btn-sm btn-success pull-right">
+        Export to Excel
+    </button>
+
+    <!-- Transaction Table -->
+    <table class="table table-striped table-hover mt-3">
+        <thead>
+            <tr>
+                <th>S.No.</th>
+                <th>Date</th>
+                <th>Expense</th>
+                <th>Item Count</th>
+                <th>Amount</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="transactionTableBody">
+            <!-- New transactions will be added here -->
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="4"><strong>Total Expenditure:</strong></td>
+                <td id="totalExpenditure">0.00</td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+
+<!-- Optional: Bootstrap JS, jQuery -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
+
+<!-- Custom JavaScript for Exporting Data and Adding/Editing/Deleting Transactions -->
+<script>
+    var editRow = null; // To track the row that is being edited
+    var transactionCount = 0; // To track the serial number
+    var totalExpenditure = 0; // To keep track of the total expenditure
+
+    // Handle Add/Edit Transaction form submission
+    $("#transactionForm").on("submit", function (e) {
+        e.preventDefault(); // Prevent form from refreshing the page
+
+        // Get input values from the form
+        var date = $("#date").val();
+        var expense = $("#expense").val();
+        var itemCount = $("#itemCount").val();
+        var amount = parseFloat($("#amount").val()); // Ensure it's treated as a number
+
+        // If the date is empty, set it to the current date
+        if (!date) {
+            date = new Date().toISOString().split('T')[0]; // Format as YYYY-MM-DD
+        }
+
+        // If we're editing an existing row
+        if (editRow) {
+            // If any field is empty, we do not update it
+            if (expense) {
+                $(editRow).find("td:nth-child(3)").text(expense);
+            }
+            if (itemCount) {
+                $(editRow).find("td:nth-child(4)").text(itemCount);
+            }
+            if (amount) {
+                $(editRow).find("td:nth-child(5)").text(amount); // Displaying raw number (no $)
+                // Update the total expenditure
+                totalExpenditure -= parseFloat($(editRow).find("td:nth-child(5)").text()); // Subtract old cost
+                totalExpenditure += amount; // Add new cost
+            }
+
+            // Update the total expenditure display
+            $("#totalExpenditure").text(totalExpenditure.toFixed(2));
+
+            // Reset editRow to null after editing
+            editRow = null;
+        } else {
+            // Add new row to the transaction table
+            transactionCount++;
+            var newRow = `
+                <tr>
+                    <td>${transactionCount}</td>
+                    <td>${date}</td>
+                    <td>${expense || ''}</td>
+                    <td>${itemCount || ''}</td>
+                    <td>${amount || ''}</td> <!-- Displaying raw number (no $) -->
+                    <td>
+                        <button class="btn btn-info btn-sm editBtn">Edit</button>
+                        <button class="btn btn-danger btn-sm deleteBtn">Delete</button>
+                    </td>
+                </tr>
+            `;
+            $("#transactionTableBody").append(newRow);
+
+            // Update total expenditure if the amount was entered
+            if (amount) {
+                totalExpenditure += amount;
+                $("#totalExpenditure").text(totalExpenditure.toFixed(2));
+            }
+        }
+
+        // Clear the form
+        $("#transactionForm")[0].reset();
+
+        // Sort the table by date after adding or editing a transaction
+        sortTableByDate();
+    });
+
+    // Sort the table rows by date in ascending order
+    function sortTableByDate() {
+        var rows = $("#transactionTableBody tr").get();
+
+        rows.sort(function (rowA, rowB) {
+            var dateA = $(rowA).find("td:nth-child(2)").text();
+            var dateB = $(rowB).find("td:nth-child(2)").text();
+
+            return new Date(dateA) - new Date(dateB); // Sorting by date (ascending)
+        });
+
+        // Append the sorted rows back to the table body
+        $.each(rows, function (index, row) {
+            $("#transactionTableBody").append(row);
+        });
+
+        // Reorder the serial numbers after sorting
+        $("#transactionTableBody").children().each(function (index) {
+            $(this).children("td:first").text(index + 1);
+        });
+    }
+
+    // Edit button functionality
+    $(document).on("click", ".editBtn", function () {
+        // Get the row that was clicked
+        editRow = $(this).closest("tr");
+
+        // Fill the form with the current data from the row
+        var date = $(editRow).find("td:nth-child(2)").text();
+        var expense = $(editRow).find("td:nth-child(3)").text();
+        var itemCount = $(editRow).find("td:nth-child(4)").text();
+        var amount = $(editRow).find("td:nth-child(5)").text();
+
+        $("#date").val(date);
+        $("#expense").val(expense);
+        $("#itemCount").val(itemCount);
+        $("#amount").val(amount);
+
+        // Change form button text to "Save Changes" (optional)
+        $("button[type='submit']").text("Save Changes");
+    });
+
+    // Delete button functionality
+    $(document).on("click", ".deleteBtn", function () {
+        // Get the row to delete
+        var rowToDelete = $(this).closest("tr");
+
+        // Get the amount of the transaction to subtract from total expenditure
+        var amount = parseFloat(rowToDelete.find("td:nth-child(5)").text());
+
+        // Subtract the amount of this transaction from total expenditure
+        totalExpenditure -= amount;
+
+        // Remove the row from the table
+        rowToDelete.remove();
+
+        // Update the total expenditure display
+        $("#totalExpenditure").text(totalExpenditure.toFixed(2));
+
+        // Update the serial numbers of remaining rows
+        $("#transactionTableBody").children().each(function (index) {
+            $(this).children("td:first").text(index + 1);
+        });
+    });
+
+    // Handle Export to Excel functionality
+    $("#exportTransactionHistory").on("click", function () {
+        // Select the transaction table and convert it to an array of data
+        var table = $("table.table");
+        var rows = table.find("tbody tr");
+
+        var transactionData = [];
+        rows.each(function () {
+            var row = $(this);
+            var rowData = [];
+            row.find("td").each(function () {
+                rowData.push($(this).text());
+            });
+            transactionData.push(rowData);
+        });
+
+        // Add header row (You can customize the column headers as needed)
+        var header = ["S.No.", "Date", "Expense", "Item Count", "Amount"];
+        transactionData.unshift(header);
+
+        // Create a worksheet
+        var ws = XLSX.utils.aoa_to_sheet(transactionData);
+
+        // Create a workbook
+        var wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Transactions");
+
+        // Export the workbook to an Excel file
+        XLSX.writeFile(wb, "transaction_history.xlsx");
+    });
+</script>
+
+</body>
+</html>
